@@ -14,3 +14,4 @@ R has 3 files
  Needs a bit of work to finsh off determining what the F level should be in order to meet a prescribed SPR input.
   - Jane is tasked with it, go Jane!
  
+The TMB folder is all C++ code - play in there at your own peril!
