@@ -82,8 +82,8 @@ data = list(ages = dat$age,
             sd_M = 0.05,     # Prior on M sd
             mu_F = 0.1,      # Prior on F
             sd_F = 0.05,     # Prior on F sd
-            mu_mu = 8.0,    # Prior on 50% selected
-            sd_mu = 0.05,  # Prior on 50% selected sd
+            mu_mu = 8.0,    # Prior on age at fully selected
+            sd_mu = 0.05,  # Prior on age at fully selected sd
             mu_ups = 1.4,   # Prior on selectivity slope
             sd_ups = 0.05, # prior on selectivity slope sd
             laa = ins$length,

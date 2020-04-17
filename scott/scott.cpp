@@ -73,7 +73,7 @@ Type objective_function<Type>::operator() ()
   
   for(int a=0; a<A; a++){
     
-    saC(a) = logitSelectivity(a+1, mu, upsilon);
+    saC(a) = logitSelectivity(a, mu, upsilon);
     
   }
   
