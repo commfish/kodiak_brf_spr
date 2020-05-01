@@ -73,7 +73,7 @@ Type objective_function<Type>::operator() ()
   
   // Logistic selectivity-at-age
   for(int a=0; a<A; a++){
-    saC(a) = Type(1) / (Type(1) + exp(Type(-1.0) * upsilon * (a - mu)));//logitSelectivity(a+1, mu, upsilon);
+    saC(a) = Type(1) / (Type(1) + exp(Type(-1.0) * upsilon * (a - mu)));
   }
 
   // Fully-selected fishing mortality at age
