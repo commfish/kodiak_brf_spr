@@ -44,6 +44,13 @@ read_csv(here::here("data/docksideAWLSM.csv"), guess = 50000) %>%
   # select retains specific columns
   dplyr::select(Section, sex, length, weight, age, year, Year, Age, Sex) -> brf
 
+# catch by district used to weight age comps
+
+catch <- read_csv("data/district_year_catch.csv", guess_max = 100000) %>% 
+  rename(Section = district)
+
+# Allomtry ----
+
 # estimate length/weight relationship
 # weight = a * length ^ b
 
@@ -61,6 +68,8 @@ data.frame(length = 1:70) %>%
   geom_line() + 
   geom_point(data = brf, alpha = 0.2) # alpha makes overlapping point transluscent
 
+# Maturity ----
+
 # Logistic parameters for maturity at age from Kodiak study (note that these
 # values may be updated in 2021): Worton, C., and D. Urban. 2005. Life history
 # parameters of black rockfish in the Kodiak Area. Pages 43-53. [In]: Nearshore
@@ -74,6 +83,8 @@ data.frame(age = 1:plus_group) %>%
   mutate(maturity = exp(mat_int + mat_slope * age) / (1 + exp(mat_int + mat_slope * age)))  %>% 
   ggplot(aes(age, maturity)) + 
   geom_line() 
+
+# Growth ----
 
 # von b - these parameter estimates were created using the vonb.R script
 vonb <- read_csv(here::here("output/vonb.csv")) # reading in the results from vonb.R
@@ -119,6 +130,11 @@ write_csv(fake_catch, path = "data/kodiak_catch_example.csv")
 # Create a look-up tables of weighting factors for each area-year combo that is
 # catch normalized (scaled between 0 and 1) 
 areayear_weights <- fake_catch %>% 
+  mutate(weight = scales::rescale(catch)) %>% 
+  select(-catch)
+
+# Using real catch data
+areayear_weights <- catch %>% 
   mutate(weight = scales::rescale(catch)) %>% 
   select(-catch)
 
