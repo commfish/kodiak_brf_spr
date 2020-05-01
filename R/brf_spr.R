@@ -1,13 +1,15 @@
-# black rockfish selectivity at age
-# ben.williams@alaska.gov
+# Black rockfish SPR and selectivity-at-age
+# ben.williams@noaa.gov, jane.sullivan1@alaska.gov
+# Last updated May 1, 2020
 
-# load ----
+# Developed for Westward Region
+# Contact: carrie.worton@alaska.gov
+
+# Load ----
 source(here::here("R/helper.r"))
 
-# data ----
+# Data ----
 
-# note if the lengths are not rounded there are occasionaly more precise estimates
-# these will not allow the model to converge
 # combine sport and comm age data
 plus_group <- 30
 
@@ -18,42 +20,53 @@ plus_group <- 30
 # mimics Excel spreadsheet from Scott Meyer
 
 read_csv(here::here("data/docksideAWLSM.csv"), guess = 50000) %>% 
-  rename_all(tolower) %>% 
+  rename_all(tolower) %>% # rename all to lowercase 
+  # select() example: new name = old name
   dplyr::select(date = sample_date, Area = mgmt_area, Section = section,
                 gear = gear_code, sex, length, maturity, weight, age = final_age) %>% 
-  mutate(date = lubridate::mdy(date),
+  # mutate adds new column, lubridate changes times and dates to different formats
+  mutate(date = lubridate::mdy(date), # mdy = month, day, year
          year = lubridate::year(date),
-         Year = factor(year),
+         Year = factor(year), # capitilized objects are factors
          Age = factor(age),
-         Sex = case_when(sex==1 ~ "male",
+         # case_when() similar to ifelse()
+         Sex = case_when(sex==1 ~ "male", 
                          sex==2 ~ "female"),
-         weight = ifelse(weight==0, NA, weight),
+         weight = ifelse(weight==0, NA, weight), # cleaning false 0s, making them NAs
          age = ifelse(age>plus_group, plus_group, age)) %>% 
-  filter(age>0, 
-         !is.na(Sex),
-         Section %in% c("Afognak", "Eastside", "Northeast", "Southeast"), sex==2) %>% 
+  # Filtering is like subsetting
+  filter(age>0, # only want ages greater than 0
+         !is.na(Sex), # !is.na = "cannot equal NA", removing NAs sex
+         # %in% similar to == except for a list or a vector of options
+         Section %in% c("Afognak", "Eastside", "Northeast", "Southeast"), 
+         # Only keeping females!
+         sex==2) %>% 
+  # select retains specific columns
   dplyr::select(Section, sex, length, weight, age, year, Year, Age, Sex) -> brf
 
-
 # estimate length/weight relationship
-# a * length^b
+# weight = a * length ^ b
 
+# lm() = fits a linear model
+# $ extracts coefficients or parameter estimates from the linear model
+# unname() = cleans up the output
 lw <- unname(lm(log(weight) ~ log(length), data = brf)$coef)
-lw_int = (lw[1])
-lw_slope = (lw[2])
-
-m_lw_int = (lw[1])
-m_lw_slope = (lw[2])
-
+lw_int <- (lw[1])
+lw_slope <- (lw[2])
 
 data.frame(length = 1:70) %>% 
+  # adding a new column for predicted weights - transformation out of log-space
   mutate(weight = exp(lw_int + lw_slope * log(length)))  %>% 
-  ggplot(aes(length, weight)) + 
+  ggplot(aes(x = length, y = weight)) + 
   geom_line() + 
-  geom_point(data = brf, alpha = 0.2)
+  geom_point(data = brf, alpha = 0.2) # alpha makes overlapping point transluscent
 
-# maturity at age from Kodiak study 
-# A50 - 10.47 years may not apply...
+# Logistic parameters for maturity at age from Kodiak study (note that these
+# values may be updated in 2021): Worton, C., and D. Urban. 2005. Life history
+# parameters of black rockfish in the Kodiak Area. Pages 43-53. [In]: Nearshore
+# marine research in Alaska (IV): Final comprehensive progress report. NOAA
+# Cooperative Agreement NA16FN2808. Alaska Department of Fish and Game, Division
+# of Commercial Fisheries, Juneau.
 mat_int = -7.521637
 mat_slope = 0.717806
 
@@ -62,12 +75,13 @@ data.frame(age = 1:plus_group) %>%
   ggplot(aes(age, maturity)) + 
   geom_line() 
 
-# von b
-vonb <- read_csv(here::here("output/vonb.csv"))
-Linf <- vonb$value[vonb$param=="f_Linf"]
-kappa <- vonb$value[vonb$param=="f_kappa"]
-t0 <- vonb$value[vonb$param=="f_t0"]
+# von b - these parameter estimates were created using the vonb.R script
+vonb <- read_csv(here::here("output/vonb.csv")) # reading in the results from vonb.R
+Linf <- vonb$value[vonb$param=="f_Linf"] # subseting the individual parameter estimates
+kappa <- vonb$value[vonb$param=="f_kappa"] # this looks high
+t0 <- vonb$value[vonb$param=="f_t0"] # may want to revisit, usually t0 are negative
 
+# Visualizes the vonB fit to the data
 brf %>% 
   mutate(fit = Linf * (1 - exp(-kappa * (age - t0)))) %>% 
   ggplot(aes(age, length)) + 
@@ -75,32 +89,65 @@ brf %>%
   geom_line(aes(y = fit)) +
   expand_limits(y = 0, x = 0)
 
-tibble(age = 0:plus_group) %>% 
-  mutate(length = Linf * (1 - exp(-kappa * (age - t0))),
-         length = ifelse(length<0, 0.01, length),
-         weight = exp(lw_int + lw_slope * log(length)),
-         mature = 1 / (1 + exp(mat_int + mat_slope * age)) * exp(mat_int + mat_slope * age)) -> ins  
+# Store all model inputs into a single object that spans the ages used in the model
+tibble(age = 0:plus_group) %>% # tibble() creates a data.frame()
+  mutate(length = Linf * (1 - exp(-kappa * (age - t0))), # growth 
+         length = ifelse(length<0, 0.01, length), # making any negative lengths that were artifacts of the vonB model = small values
+         weight = exp(lw_int + lw_slope * log(length)), # weight-length relationship
+         # maturity
+         mature = exp(mat_int + mat_slope * age) / (1 + exp(mat_int + mat_slope * age))) -> ins  
 
-# potential M
+# potential values for natural mortality (M) - you can find these and similar M
+# estimators using the barefoot ecologist tool:
+# http://barefootecologist.com.au/shiny_m.html
 4.899 * seq(30,50,5) ^-0.916
 4.118 * kappa^ 0.73 * Linf^-0.33
 
-# clean data ----
-brf %>% 
-  dplyr::select(age, year) %>% 
-  mutate(total_n = n()) %>% 
-  group_by(year) %>% 
-  mutate(annual_n = n()) %>% 
-  group_by(age, year) %>% 
-  mutate(n = n()) %>% 
-  ungroup %>% 
-  mutate(prop = range01(n / annual_n) * annual_n) %>% 
-  group_by(age) %>% 
-  summarise(prop = sum(prop) / mean(total_n)) %>% 
-  mutate(prop = range01(prop)) %>% 
-  left_join(data.frame(age = 0:plus_group), .) %>% 
-  mutate(prop = replace_na(prop, 0)) -> select_dat
+# Age composition data ----
 
+# Weight catch by area and year - the goal is to make the age composition as
+# representative of your catch as possible
+
+# To illustrate this concept, I created a fake dataset of catch in earch area
+# and year. You'll want to use actual harvest data instead.
+fake_catch <- data.frame(expand.grid(Section = unique(brf$Section),
+            year = unique(brf$year))) 
+fake_catch <- fake_catch %>% 
+  mutate(catch = runif(min = 20, max = 300, n = nrow(fake_catch)))
+write_csv(fake_catch, path = "data/kodiak_catch_example.csv")
+
+# Create a look-up tables of weighting factors for each area-year combo that is
+# catch normalized (scaled between 0 and 1) 
+areayear_weights <- fake_catch %>% 
+  mutate(weight = scales::rescale(catch)) %>% 
+  select(-catch)
+
+# Age composition data
+select_dat <- brf %>% 
+  count(year, Section, age) %>%
+  # join to area-year look-up table 
+  left_join(areayear_weights, by = c("year", "Section")) %>% 
+  # adjust sample size by multiplying by area-year weighting factor
+  mutate(adj_n = n * weight,
+         # total adjusted sample size
+         total_adj_n = sum(adj_n)) %>% 
+  # within each age, add up all the samples and divide by the total sample size
+  # to get proportions-at-age
+  group_by(age) %>%
+  summarise(prop = round(sum(adj_n) / unique(total_adj_n), 5)) %>% 
+  ungroup() %>% 
+  # join back to full dataframe of all ages for input to the model
+  full_join(data.frame(age = 0:plus_group)) %>% 
+  mutate(prop = replace_na(prop, 0)) %>% 
+  arrange(age)
+
+# check that comp sums to 1
+sum(select_dat$prop)
+
+# plot of combined comp
+ggplot(select_dat, aes(x = age, y = prop)) +
+  geom_bar(stat = "identity",
+           position = "dodge") 
 
 # TMB model ----
 setwd(here::here("TMB"))
@@ -110,18 +157,23 @@ dyn.load(dynlib("target_spr"))
 
 data = list(ages = select_dat$age,
             paaC = select_dat$prop,
-            mu_M = 0.18,
+            # Normal prior on estimated natural mortality Normal ~ (mu, sd)
+            mu_M = 0.18, # 
             sd_M = 0.05,
+            # Normal prior on estimated fishing mortality Normal ~ (mu, sd)
             mu_F = 0.1,
             sd_F = 0.05,
+            # Normal prior on Fspr (fishing mortality rate at target SPR)
             mu_Fspr = 0.1,
             sd_Fspr = 0.05,
+            # Priors for logistic selectivity parameters mu (a50) and upsilson
+            # (rate/scale), Normal ~ (mu, sd)
             mu_mu = 8,
             sd_mu = 0.25,
             mu_ups = 1.5,
-            sd_ups = .05,
-            laa = ins$length,
-            maa = ins$mature,
+            sd_ups = 0.05,
+            laa = ins$length, # this model doesn't use length-at-age
+            maa = ins$mature, #
             waa = ins$weight,
             target_spr = 0.50)
 
@@ -136,7 +188,7 @@ params = list(logM = log(0.183),
 map = list()
 
 
-# parameter bounds
+# upper and lower parameter bounds
 
 L <- c(logM = log(0.02),
        logF = log(.02), 
@@ -166,29 +218,43 @@ fit <- nlminb(model$par,
               lower = L,
               upper = U)
 
+# Output of parameter estimates and maximum gradient component (mgc), which
+# should be < 0.001, preferrably < 0.00001. If mgc is high or the rep says
+# "Hessian not positive definite" DO NOT USE MODEL OUTPUT. It means the model
+# has not converged
 rep <- sdreport(model)
-(ss = summary(rep, select = "all", p.value = T))
+rep 
 
+# Summary table of estimated parameters and SEs (all are in log space)
+(ss = summary(rep, select = "all", p.value = TRUE))
 
-propC <- model$report()$propC
-(M <- model$report()$M)
-(F <- model$report()$F)
-Fa <- model$report()$Fa
-(Fspr <- model$report()$Fspr)
-saC <- model$report()$saC
-(mu <- model$report()$mu)
-(upsilon <- model$report()$upsilon)
-Ca <- model$report()$Ca 
-Ua <- model$report()$Va
-Na <- model$report()$Na
-(spr <- model$report()$spr)
-(spr_nll <- model$report()$spr_nll)
-# data.frame(saf = saC, 
-#            M = M, 
-#            F = F) %>% 
+# use model$report() to extract different estimated or derived quantities from
+# the model
+propC <- model$report()$propC # catch age comps
+(M <- model$report()$M) # natural mortality estimate
+(F <- model$report()$F) # fishing mortality estimate
+(Fa <- model$report()$Fa) # fishing mortality at age (fully selected)
+(Fspr <- model$report()$Fspr) # estimated fishing mortality at target SPR 
+saC <- model$report()$saC # selectivity-at-age
+(mu <- model$report()$mu) # a50: age at 50% selectivity
+(upsilon <- model$report()$upsilon) # selectivity slope
+(Ca <- model$report()$Ca) # catch-at-age in numbers
+Ua <- model$report()$Va # unfished numbers-at-age
+Na <- model$report()$Na # fished numbers-at-age (at current F)
+(spr <- model$report()$spr) # spr estimate 
+(catch_target_spr <- model$report()$catch_target_spr)
+
+(priors <- model$report()$priors) # likelihood component related to priors
+(comp_nll <- model$report()$comp_nll) # likelihood component related to fit of age comps
+(spr_nll <- model$report()$spr_nll) # likelihood component related to spr penalty
+(tot_nll <- model$report()$tot_nll) # likelihood component related to spr penalty
+
+data.frame(saf = saC,
+           M = M,
+           F = F) %>%
 #   write_csv(here::here("data/select.csv"))
 
-
+# Report file
 tibble(age = 0:plus_group) %>% 
   mutate(length = Linf * (1 - exp(-kappa * (age - t0))),
          length = ifelse(length<0, 0.01, length),
@@ -225,3 +291,4 @@ report %>%
 
 report %>% 
   summarise(spr = sum(fished) / sum(unfished))
+
