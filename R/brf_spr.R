@@ -35,14 +35,12 @@ read_csv(here::here("data/docksideAWLSM.csv"), guess = 50000) %>%
          weight = ifelse(weight==0, NA, weight), # cleaning false 0s, making them NAs
          age = ifelse(age>plus_group, plus_group, age)) %>% 
   # Filtering is like subsetting
-  filter(age>0, # only want ages greater than 0
+  filter(age > 0, # only want ages greater than 0
          !is.na(Sex), # !is.na = "cannot equal NA", removing NAs sex
          # %in% similar to == except for a list or a vector of options
-         Section %in% c("Afognak", "Eastside", "Northeast", "Southeast"), 
-         # If you only wanted to look at certain years:
-         filter(year > 2012) %>% 
+         Section %in% c("Afognak", "Eastside", "Northeast", "Southeast"),
          # Only keeping females!
-         sex==2) %>% 
+         sex == 2) %>%
   # select retains specific columns
   dplyr::select(Section, sex, length, weight, age, year, Year, Age, Sex) -> brf
 
@@ -118,6 +116,10 @@ tibble(age = 0:plus_group) %>% # tibble() creates a data.frame()
 4.118 * kappa^ 0.73 * Linf^-0.33
 
 # Age composition data ----
+
+# RECOMMENDATION FROM JASON C 2020-06-03 TO ONLY WEIGHT BY AREA, NOT YEAR x AREA
+# AND TO RUN THE MODEL SEPARATELY BY YEAR. THE FOLLOWING CODE WILL NEED TO BE
+# ADAPTED TO ADHERE TO THAT RECOMMENDATION.
 
 # Weight catch by area and year - the goal is to make the age composition as
 # representative of your catch as possible
